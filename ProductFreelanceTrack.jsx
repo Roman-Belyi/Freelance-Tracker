@@ -8,22 +8,17 @@ import {z} from 'zod'
 import { uk } from "zod/locales"
 z.config(uk());
 
-console.log('FreelanceUpwork - mini V0.1.0')
+console.log('FreelanceUpwork - mini V0.4.1')
 
 
 //----------------------------------------------------------------------------------------------------------//
 
-//VERSION V0.3.1
-//ADDED: ESCAPE HATCHES
-// USEEFFECT, USEEFFECTEVENT,USEREF,CUSTOM HOOKS.         //MAY-JULY 2026//
+//VERSION V0.4.1
+//ADDED: ZUSTAND UPDATE
+//NEW FEATURES: USESHALLOW,CREATE,USESTORE, Global State
 
 
-//NEW FUNCTIONS IN UPDATE:
-//FILTERED STATUS, CREATE OWN GIGS, SAVE DATA IN LOCALSTORAGE
-// DELETE USELESS GIGS,SEARCH GIGS, GIG DEADLINE
-
-
-// SYSTEM GIGS (DATA)//
+//DATA GIGS//
 const mockGigs = [
   {
     author: 'System',
@@ -78,43 +73,76 @@ const mockGigs = [
     canDoneTime: null
   }
 ];
+//
 
-const initial = {
-  gigs: mockGigs,
-  balance: 0
-};
+  //MAIN LOGIC ZUSTAND//
+  const useStore = create(persist((set,get) => ({
+     gigs: mockGigs,
+     balance: 0,
 
-  //REDUCER MAIN LOGIC//
-function Reducer(state, action) {
-  const handlers = {
-    LIKE: (state, action) => ({...state, gigs: state.gigs.map(g => g.id === action.payload ? {...g, priority: g.priority + 1} : g)}),
-    DISLIKE: (state, action) => ({...state, gigs: state.gigs.map(g => g.id === action.payload ? {...g, priority: g.priority - 1} : g)}),
-    SAVE: (state, action) => ({...state, gigs: state.gigs.map(g => g.id === action.payload && g.status === 'new' ? { ...g, status: 'in-progress', canDoneTime: Date.now() + 60000 }: g)}),
-    DONE: (state, action) => {
-      const gig = state.gigs.find(g => g.id === action.payload);
-      if (!gig || gig.status !== 'in-progress') return state;
-      return {...state, balance: state.balance + gig.price, gigs: state.gigs.map(g => g.id === action.payload ? { ...g, status: 'finished', done: true } : g)};
-    },
-    ADD_GIG: (state,action) => ({...state, gigs: [...state.gigs, action.payload] }),
-    DELETE_GIG: (state,action) => ({...state, gigs:[...state.gigs.filter(g => g.id !== action.payload)]})
-  };
-  const handler = handlers[action.type];
-  return handler ? handler(state, action) : state;
-}
-  // REDUCER END//
+     like: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id ? {...g, priority: g.priority + 1} : g )})),
+     dislike: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id ? {...g, priority: g.priority - 1} : g)})),
+     save: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id && g.status === 'new' ? {...g, status: 'in-progress',canDoneTime: Date.now() + 60000 }: g )})),
+     done: (id) => set((state) => {
+        const gig = state.gigs.find(g => g.id === id);
+        if (!gig || gig.status !== 'in-progress') return state;
+        return {...state,balance: state.balance + gig.price, gigs: state.gigs.map(g => g.id === id ? {...g, status: 'finished', done: true} : g)}
+     }),
+     add_gig: (newGig) => set((state) => ({...state,gigs: [...state.gigs, newGig]})),
+     delete_gig: (id) => set((state) => ({...state,gigs: [...state.gigs.filter(g => g.id !== id)]})),
+  }),{name: 'freelance_tracker'}))
+
+//
 
     //GIGS COMPONENT//
-    function AllVacancy({ gigs, onAction }) {
-      const onEvent = useEffectEvent(() =>{
-     alert('Deadline is coming soon!')
-  })
+    function AllVacancy() {
+        const {gigs,balance} = useStore(useShallow((s) => ({
+             balance: s.balance,
+             gigs: s.gigs,
+        })))
+
+    const [selectedStatus, setSelectedStatus] = useState('all');
+    const [searchQuary,setSearchQuery] = useState('')
+
+    const filteredGigs = gigs.filter(gig => {
+    const matchSelected =  selectedStatus === 'all' || gig.status === selectedStatus;
+    const matchQuery = gig.tags.toLowerCase().includes(searchQuary.toLowerCase());
+
+    return matchSelected && matchQuery
+    });
+ 
+  
+     function HandleStatus(e) {
+        setSelectedStatus(e.target.value);
+       }
+
+
+          const onEvent = useEffectEvent(() =>{
+               alert('Deadline is coming soon!')
+         })
   return (
     <div>
       <h1>Vacancys</h1>
       <p>Your trusted Upwork.</p>
+
+       <div className="search--tag-box">
+         <label>Search gig by tag:</label>
+         <input type="text" value={searchQuary} onChange={(e) => setSearchQuery(e.target.value.trim())} placeholder="Search by tag..." />
+      </div>
+
+      <div className="filter-box">
+        <select onChange={HandleStatus} value={selectedStatus}>
+          <option value="all">All</option>
+          <option value="new">New</option>
+          <option value="paid">Paid</option>
+          <option value="in-progress">In-progress</option>
+          <option value="finished">Finished</option>
+        </select>
+      </div>
+
       <div className="vacancies">
         <ul>
-          {gigs.map(list => (
+          {filteredGigs.map(list => (
             <div key={list.id} className="gig-card">
               <h2 className="author-name">Author: {list.author}</h2>
               <h2 className="title">Title:{list.title}</h2>
@@ -125,14 +153,13 @@ function Reducer(state, action) {
               <div>Note:{list.notes}</div>
               <div>Tags: {list.tags}</div>
               <time className="time">Added:{list.addedAt}</time>
-             
-             
 
-              <button onClick={() => onAction({type:'LIKE', payload: list.id})}>Like </button>
-              <button onClick={() => onAction({type:'DISLIKE', payload: list.id})}>DisLike </button>
-              <button onClick={(e) => {e.preventDefault(); onEvent(); onAction({type: 'SAVE', payload: list.id})}}>Save</button>
-              <button type="button" disabled={list.status !== 'in-progress' || (list.canDoneTime && Date.now() < list.canDoneTime)} onClick={() => onAction({type: 'DONE', payload: list.id})}>Done</button>
-              <button type="button" onClick={() => onAction({type: 'DELETE_GIG', payload: list.id})}>Delete</button>
+
+              <button onClick={() => useStore.getState().like(list.id)}>Like </button>
+              <button onClick={() => useStore.getState().dislike(list.id)}>DisLike </button>
+              <button onClick={(e) => {e.preventDefault(); onEvent(); useStore.getState().save(list.id)} }>Save</button>
+              <button type="button" disabled={list.status !== 'in-progress' || (list.canDoneTime && Date.now() < list.canDoneTime)} onClick={() => useStore.getState().done(list.id)}>Done</button>
+              <button type="button" onClick={() => useStore.getState().delete_gig(list.id)}>Delete</button>
             </div>
           ))}
         </ul>
@@ -140,11 +167,10 @@ function Reducer(state, action) {
     </div>
   );
 }
-//
-   
 
-//CREATE OWN GIG
-function CreateFormComponent({onAction}){
+//ADD CUSTOM GIG FORM//
+
+function CreateFormComponent(){
     const [author,setAuthor] = useState('')
     const [title,setTitle] = useState('')
     const [price,setPrice] = useState(0)
@@ -174,7 +200,7 @@ function CreateFormComponent({onAction}){
         addedAt: new Date().toISOString().slice(0,10)
       }
       console.log("New gig:", newGig)
-       onAction({type: 'ADD_GIG',payload: newGig})
+      useStore.getState().add_gig(newGig)
        setAuthor('')
        setTitle('')
        setPrice(0)
@@ -232,71 +258,23 @@ function CreateFormComponent({onAction}){
       </section>
     )
 }
-//
 
   //MAIN APP//
      function FreelanceUpworkMini() {
-
-  const [state, active] = useReducer(Reducer, initial, () => {
-    const mainData = localStorage.getItem('freelance_tracker');
-    return mainData ? JSON.parse(mainData) : initial;
-    // return initial                                          <------- DONT PAY ATTENTION ON THIS
-  });
-
-  useEffect(() => {
-    localStorage.setItem('freelance_tracker', JSON.stringify(state));
-  }, [state]);
-
-   const [selectedStatus, setSelectedStatus] = useState('all');
-  const [searchQuary,setSearchQuery] = useState('')
-
-  const filteredGigs = state.gigs.filter(gig => {
-    const matchSelected =  selectedStatus === 'all' || gig.status === selectedStatus;
-    const matchQuery = gig.tags.toLowerCase().includes(searchQuary.toLowerCase());
-
-    return matchSelected && matchQuery
-  });
-
-  function HandleStatus(e) {
-    setSelectedStatus(e.target.value);
-  }
-
-  
-     
-
-    
-  return (
-    <div>
-      <div className='vacancys-box'>
-        <h1>Fiverr Freelance Tracker v0.6.1 (Beta)</h1>
-        <p>Balance: {state.balance} $</p>
-        <AllVacancy gigs={filteredGigs} onAction={active}  /> 
-
-      </div>
-
-      <div className="search--tag-box">
-         <label>Search gig by tag:</label>
-         <input type="text" value={searchQuary} onChange={(e) => setSearchQuery(e.target.value.trim())} placeholder="Search by tag..." />
-      </div>
-
-      <div className="filter-box">
-        <select onChange={HandleStatus} value={selectedStatus}>
-          <option value="all">All</option>
-          <option value="new">New</option>
-          <option value="paid">Paid</option>
-          <option value="in-progress">In-progress</option>
-          <option value="finished">Finished</option>
-        </select>
+        const localStor = useStore((s) => s.balance) 
+      return (
+        <div>
+          <div className='vacancys-box'>
+           <h1>Fiverr Freelance Tracker v0.6.1 (Beta)</h1>
+           <p>Balance: {localStor} $</p>
+           <AllVacancy /> 
       </div>
 
       <div className="custom-box">
-        <CreateFormComponent onAction={active}/>
+        <CreateFormComponent/>
       </div>
     </div>
   );
 }
-//END MAIN APP//
 
-
-
-///--------------------------/////
+//----------------------------------------------------------------//
