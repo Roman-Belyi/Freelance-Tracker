@@ -11,24 +11,24 @@ z.config(uk());
 console.log('FreelanceUpwork - mini V0.4.1')
 
 
-//----------------------------------------------------------------------------------------------------------//
+//------------------------------------------------------------------------------------------------------------------//
 
-//VERSION V0.4.1
-//ADDED: ZUSTAND UPDATE
-//NEW FEATURES: USESHALLOW,CREATE,USESTORE, Global State
+//VERSION V0.4.4
+//ADDED: UPDATE ZOD V4
+//NEW FEATURES: FROM REACT FORM TO ZOD SCHEMA FORM
 
 
-//DATA GIGS//
+// DATA GIGS //
 const mockGigs = [
   {
     author: 'System',
     id: 1,
-    title: "Сделать крутой логотип в стиле минимализм",
+    title: "Create a minimalist logo design",
     price: 45,
     status: "new",             
     done: false,
     priority: 3,                
-    notes: "Клиент хочет чёрно-белый + название шрифтом как у Nike",
+    notes: "Client wants black and white + brand name in Nike-style font",
     tags: 'HTML,posts,design',
     addedAt: "2025-02-10",
     canDoneTime: null
@@ -36,12 +36,12 @@ const mockGigs = [
   {
      author: 'System2',
     id: 2,
-    title: "Написать 1000 отзывов для магазина на Etsy",
+    title: "Write 1000 product reviews for Etsy",
     price: 120,
     status: "in-progress",      
     done: false,
     priority: 2,
-    notes: "Делать по 50 в день, дедлайн через 20 дней",
+    notes: "Write 50 per day, deadline in 20 days",
     tags: 'HTML,posts,design',
     addedAt: "2025-02-08",
     canDoneTime: null
@@ -49,12 +49,12 @@ const mockGigs = [
   {
      author: 'System3',
     id: 3,
-    title: "Монтаж короткого TikTok-видео (15 сек)",
+    title: "Edit a short TikTok video (15 sec)",
     price: 25,
     status: "finished",             
     done: true,
     priority: 1,
-    notes: "Клиент доволен, просит ещё 3 видео",
+    notes: "Client is happy, wants 3 more videos",
     tags: 'HTML,parcel,design',
     addedAt: "2025-02-09",
     canDoneTime: null
@@ -62,12 +62,12 @@ const mockGigs = [
   {
      author: 'System4',
     id: 4,
-    title: "Создать 5 постов для Instagram + сторис",
+    title: "Design 5 Instagram posts + stories",
     price: 70,
     status: "paid",             
     done: true,
     priority: 2,
-    notes: "Клиент оставил 5⭐ отзыв",
+    notes: "Client left a 5⭐ review", 
     tags:'HTML,posts,design',
     addedAt: "2025-02-07",
     canDoneTime: null
@@ -75,7 +75,7 @@ const mockGigs = [
 ];
 //
 
-  //MAIN LOGIC ZUSTAND//
+  //USESTORE MAIN LOGIC ZUSTAND//
   const useStore = create(persist((set,get) => ({
      gigs: mockGigs,
      balance: 0,
@@ -91,8 +91,8 @@ const mockGigs = [
      add_gig: (newGig) => set((state) => ({...state,gigs: [...state.gigs, newGig]})),
      delete_gig: (id) => set((state) => ({...state,gigs: [...state.gigs.filter(g => g.id !== id)]})),
   }),{name: 'freelance_tracker'}))
+  //
 
-//
 
     //GIGS COMPONENT//
     function AllVacancy() {
@@ -167,9 +167,22 @@ const mockGigs = [
     </div>
   );
 }
+//
 
 //ADD CUSTOM GIG FORM//
 
+//ZOD SCHEMA//
+    const createOwnGigs_User = z.object({
+       author: z.string().min(2, 'Minimum 2 symbols!').max(25,'Maximum 25 symbols!'),
+       title: z.string().min(4, 'Title must have minimum 4 symbols.').max(100, 'Title could keep 100 symbols!'),
+       price: z.coerce.number().min(15, 'Min price is - 15 dollar/euro/uan/rub/ron/cny/pls').max(99999, 'Max price is - 99999 dollar/euro/uan/rub/ron/cny/pls '),
+       notes: z.string().max(1250).optional().transform(val => val === "" ? undefined : val),
+       tags: z.string().max(30).optional(),
+       priority: z.coerce.number().min(1).max(5),
+    })
+    //
+
+    //USESTATES OF FORM//
 function CreateFormComponent(){
     const [author,setAuthor] = useState('')
     const [title,setTitle] = useState('')
@@ -177,80 +190,94 @@ function CreateFormComponent(){
     const [notes,setNotes] = useState('')
     const [priority,setPriority] = useState(3)
     const [tags,setTags] = useState('')
+    const [errors, setErrors] = useState({}) 
     const formRef = useRef(null)
 
     function createForm(e){
       e.preventDefault()
-      const numericPrice = parseInt(price)
-      if(numericPrice > 100000){
-        alert('Unacceptable price!')
-        console.error('Price must be less than one hundred thousand')
+      const resultGigs_User = createOwnGigs_User.safeParse({
+         author: author,           
+         title: title,             
+         price: parseInt(price),   
+         notes: notes,             
+         priority: priority,       
+         tags: tags,               
+      })
+      
+      if(!resultGigs_User.success){
+        const errors = z.flattenError(resultGigs_User.error)
+        setErrors(errors.fieldErrors || {})
+        console.log('Form parsing error ! ')
         return
-      }
-      const newGig = {
-        author: author,
+      } 
+      const newGig_System = {
+        ...resultGigs_User.data,
         id: crypto.randomUUID(),
-        title: title,
-        price: numericPrice,
         status: 'new',
         done: false,
-        priority: priority,
-        notes: notes,
-        tags:tags,
         addedAt: new Date().toISOString().slice(0,10)
       }
-      console.log("New gig:", newGig)
-      useStore.getState().add_gig(newGig)
+
+
+      console.log("New gig:", newGig_System)
+      useStore.getState().add_gig(newGig_System)
        setAuthor('')
        setTitle('')
        setPrice(0)
        setNotes('')
        setTags('')
        setPriority(1)
+       setErrors({})
        formRef.current.focus()
     }
+    
 
     return(
       <section className="create-box">
         <form onSubmit={createForm}>
           <div className="author-input">
             <label htmlFor="author">Author:</label>
-            <input name="author" type="text" ref={formRef} value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Enter your name/surname..." minLength={3} maxLength={25} required/>
+            <input name="author" type="text" ref={formRef} value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Enter your name/surname..." required/>
             <span id="char-counter" style={{ fontSize: '12px', color: '#666' }}>
              Symbols left: {25 - author.length} out {25}
             </span>
+            {errors.author && <span style={{ color: 'red' }}>{errors.author[0]}</span>}
           </div>
 
           <div className="title-input">
             <label htmlFor='title'>Title:</label>
-            <input name="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={500} placeholder="Enter you description..." required/>
+            <input name="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter you description..." required/>
             <span id="desc-counter" style={{ fontSize: '12px', color: '#666' }}>
              Symbols: {title.length} / 500
             </span>
+            {errors.title && <span style={{ color: 'red' }}>{errors.title[0]}</span>}
           </div>
 
           <div className="price--note-input">
             <div className="price">
              <label htmlFor="price">Price:</label>
-             <input type="number" name="price" value={price} min="500" max="100000" placeholder="Your price:" onChange={(e) => setPrice(e.target.value)} required  />
+             <input type="number" name="price" value={price} placeholder="Your price:" onChange={(e) => setPrice(e.target.value)} required  />
+             {errors.price && <span style={{ color: 'red' }}>{errors.price[0]}</span>}
             </div>
 
             <div className="notes">
               <label htmlFor="note">Notes:</label>
-              <input type="text" name="note" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Enter additional notes"  maxLength={100}/>
+              <input type="text" name="note" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Enter additional notes" />
             </div>
+            {errors.notes && <span style={{ color: 'red' }}>{errors.notes[0]}</span>}
           </div>
           
          <div className="tags">
           <label htmlFor="tag">Tags:</label>
-          <input type="text" name="tag" value={tags} onChange={(e) => {const value = e.target.value; if (value.length >= 30) { alert('Maximum tags used!'); return  } setTags(value); }} placeholder="Enter main tags"  />
-          
+          <input type="text" name="tag" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Enter main tags"  />
+          {errors.tags && <span style={{ color: 'red' }}>{errors.tags[0]}</span>}
          </div>
 
           <div className="priority">
             <p>Priority: {priority}</p>
             <button type="button" onClick={() => setPriority(prev => prev < 5 ? prev + 1 : prev)}>+1</button>
             <button type="button" onClick={() => setPriority(prev => prev > 1 ? prev - 1 : prev)}>-1</button>
+            {errors.priority && <span style={{ color: 'red' }}>{errors.priority[0]}</span>}
           </div>
 
           <button type="submit">Create</button>
@@ -259,13 +286,13 @@ function CreateFormComponent(){
     )
 }
 
-  //MAIN APP//
+  //MAIN RENDER APP//
      function FreelanceUpworkMini() {
         const localStor = useStore((s) => s.balance) 
       return (
         <div>
           <div className='vacancys-box'>
-           <h1>Fiverr Freelance Tracker v0.6.1 (Beta)</h1>
+           <h1>Fiverr Freelance Tracker v0.6.4 (Beta)</h1>
            <p>Balance: {localStor} $</p>
            <AllVacancy /> 
       </div>
@@ -277,4 +304,5 @@ function CreateFormComponent(){
   );
 }
 
-//----------------------------------------------------------------//
+
+//<---------------------------------------------------------------------------------------------------->//
