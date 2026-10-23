@@ -289,7 +289,7 @@ function CreateFormComponent(){
       return (
         <div>
           <div className='vacancys-box'>
-           <h1>Fiverr Freelance Tracker v0.6.4 (Beta)</h1>
+           <h1>Fiverr Freelance Tracker v0.4.6 (Beta)</h1>
            <p>Balance: {localStor} $</p>
            <AllVacancy />
       </div>
