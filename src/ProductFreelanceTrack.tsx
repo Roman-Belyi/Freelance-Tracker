@@ -1,4 +1,4 @@
-import { useState, useRef, useEffectEvent } from 'react'
+import { useState, useRef } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { persist } from 'zustand/middleware'
@@ -6,8 +6,8 @@ import { z } from 'zod'
 import { uk } from 'zod/locales'
 z.config(uk())
 
-console.log('FreelanceUpwork - mini V0.4.1')
-
+const VERSION = '0.4.6'
+console.log(`FreelanceUpwork - mini V${VERSION}`)
 
 //------------------------------------------------------------------------------------------------------------------//
 
@@ -87,7 +87,7 @@ const mockGigs = [
      }),
      add_gig: (newGig) => set((state) => ({...state,gigs: [...state.gigs, newGig]})),
      delete_gig: (id) => set((state) => ({...state,gigs: [...state.gigs.filter(g => g.id !== id)]})),
-  }),{name: 'freelance_tracker'}))
+  }),{name: 'freelance_tracker', version: 1}))
   //
 
 
@@ -113,10 +113,15 @@ const mockGigs = [
         setSelectedStatus(e.target.value);
        }
 
+      function handleSave(id, status) {
+        if (status !== 'new') return
+        useStore.getState().save(id)
+        alert('Saved! You have 1 minute, hurry up!')
+      }
 
-          const onEvent = useEffectEvent(() =>{
-               alert('Deadline is coming soon!')
-         })
+         //  const onEvent = useEffectEvent(() =>{
+         //       alert('Deadline is coming soon!')
+         // })
   return (
     <div>
       <h1>Vacancys</h1>
@@ -154,7 +159,7 @@ const mockGigs = [
 
               <button onClick={() => useStore.getState().like(list.id)}>Like </button>
               <button onClick={() => useStore.getState().dislike(list.id)}>DisLike </button>
-              <button onClick={(e) => {e.preventDefault(); onEvent(); useStore.getState().save(list.id)} }>Save</button>
+              <button onClick={() => handleSave(list.id, list.status)}>Save</button>
               <button type="button" disabled={list.status !== 'in-progress' || (list.canDoneTime && Date.now() < list.canDoneTime)} onClick={() => useStore.getState().done(list.id)}>Done</button>
               <button type="button" onClick={() => useStore.getState().delete_gig(list.id)}>Delete</button>
             </div>
@@ -223,7 +228,7 @@ function CreateFormComponent(){
        setPrice(0)
        setNotes('')
        setTags('')
-       setPriority(1)
+       setPriority(3)
        setErrors({})
        formRef.current.focus()
     }
@@ -234,7 +239,7 @@ function CreateFormComponent(){
         <form onSubmit={createForm}>
           <div className="author-input">
             <label htmlFor="author">Author:</label>
-            <input name="author" type="text" ref={formRef} value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Enter your name/surname..." required/>
+            <input id="author" name="author" type="text" ref={formRef} value={author} onChange={(e) => { setAuthor(e.target.value); setErrors(prev => ({ ...prev, author: undefined })) }} placeholder="Enter your name/surname..." required/>
             <span id="char-counter" style={{ fontSize: '12px', color: '#666' }}>
              Symbols left: {25 - author.length} out {25}
             </span>
@@ -243,9 +248,9 @@ function CreateFormComponent(){
 
           <div className="title-input">
             <label htmlFor='title'>Title:</label>
-            <input name="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter you description..." required/>
+            <input id="title" name="title" type="text" value={title} onChange={(e) => { setTitle(e.target.value); setErrors(prev => ({ ...prev, title: undefined }))}} placeholder="Enter you description..." required/>
             <span id="desc-counter" style={{ fontSize: '12px', color: '#666' }}>
-             Symbols: {title.length} / 500
+             Symbols: {title.length} / 100
             </span>
             {errors.title && <span style={{ color: 'red' }}>{errors.title[0]}</span>}
           </div>
@@ -253,27 +258,27 @@ function CreateFormComponent(){
           <div className="price--note-input">
             <div className="price">
              <label htmlFor="price">Price:</label>
-             <input type="number" name="price" value={price} placeholder="Your price:" onChange={(e) => setPrice(e.target.value)} required  />
+              <input id="price" type="number" name="price" value={price} placeholder="Your price:" onChange={(e) => { setPrice(e.target.value); setErrors(prev => ({ ...prev, price: undefined })) }} required  />
              {errors.price && <span style={{ color: 'red' }}>{errors.price[0]}</span>}
             </div>
 
             <div className="notes">
-              <label htmlFor="note">Notes:</label>
-              <input type="text" name="note" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Enter additional notes" />
+              <label htmlFor="notes">Notes:</label>
+              <input id="notes" type="text" name="notes" value={notes} onChange={(e) => { setNotes(e.target.value);   setErrors(prev => ({ ...prev, notes: undefined })) }} placeholder="Enter additional notes" />
             </div>
             {errors.notes && <span style={{ color: 'red' }}>{errors.notes[0]}</span>}
           </div>
 
          <div className="tags">
-          <label htmlFor="tag">Tags:</label>
-          <input type="text" name="tag" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Enter main tags"  />
+          <label htmlFor="tags">Tags:</label>
+            <input id="tags" type="text" name="tags" value={tags} onChange={(e) => { setTags(e.target.value); setErrors(prev => ({ ...prev, tags: undefined })) }} placeholder="Enter main tags"  />
           {errors.tags && <span style={{ color: 'red' }}>{errors.tags[0]}</span>}
          </div>
 
           <div className="priority">
             <p>Priority: {priority}</p>
-            <button type="button" onClick={() => setPriority(prev => prev < 5 ? prev + 1 : prev)}>+1</button>
-            <button type="button" onClick={() => setPriority(prev => prev > 1 ? prev - 1 : prev)}>-1</button>
+            <button type="button" onClick={() => { setPriority(prev => prev < 5 ? prev + 1 : prev); setErrors(prev => ({ ...prev, priority: undefined })) }}>+1</button>
+            <button type="button" onClick={() => { setPriority(prev => prev > 1 ? prev - 1 : prev); setErrors(prev => ({ ...prev, priority: undefined })) }}>-1</button>
             {errors.priority && <span style={{ color: 'red' }}>{errors.priority[0]}</span>}
           </div>
 
@@ -289,7 +294,7 @@ function CreateFormComponent(){
       return (
         <div>
           <div className='vacancys-box'>
-           <h1>Fiverr Freelance Tracker v0.4.6 (Beta)</h1>
+           <h1>Fiverr Freelance Tracker v{VERSION} (Beta)</h1>
            <p>Balance: {localStor} $</p>
            <AllVacancy />
       </div>
