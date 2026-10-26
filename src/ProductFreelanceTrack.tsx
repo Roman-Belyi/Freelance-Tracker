@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useEffectEvent } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { persist } from 'zustand/middleware'
@@ -13,10 +13,27 @@ console.log(`FreelanceUpwork - mini V${VERSION}`)
 
 //VERSION V0.4.6
 //ADDED: Migration on TYPESCRIPT (TSX)
-//NEW FEATURES: Typezation, fix bugs
+//NEW FEATURES: Typed store/form , Done time, clamp priority
 
 // DATA GIGS //
-const mockGigs = [
+
+type Status = 'new' | 'in-progress' | 'paid' | 'finished'
+
+interface Gig {
+  author: string;
+  id: number | string;
+  title: string;
+  price: number;
+  status: Status;
+  done: boolean;
+  priority: number;
+  notes?: string;
+  tags?: string;
+  addedAt: string;
+  canDoneTime: number | null;
+}
+
+const mockGigs: Gig[] = [
   {
     author: 'System',
     id: 1,
@@ -69,59 +86,100 @@ const mockGigs = [
     addedAt: "2025-02-07",
     canDoneTime: null
   }
-];
+]
 //
 
   //USESTORE MAIN LOGIC ZUSTAND//
-  const useStore = create(persist((set,get) => ({
+
+  type StoreState = {
+    gigs: Gig[];
+    balance: number;
+
+    like: (id: Gig['id']) => void;
+    dislike: (id: Gig['id']) => void;
+    save: (id: Gig['id']) => void;
+    done: (id: Gig['id']) => void;
+
+    add_gig: (newGig: Gig) => void;
+    delete_gig: (id: Gig['id']) => void;
+  }
+
+function migrate(persisted: unknown, version: number): StoreState{
+  const state = persisted as StoreState;
+  if (version < 2) {
+    return {
+      ...state,
+      gigs: state.gigs.map(g => ({...g, canDoneTime: g.canDoneTime ?? null}))
+     }
+  }
+
+  return state
+  }
+
+  const useStore = create<StoreState>()(persist((set) => ({
      gigs: mockGigs,
      balance: 0,
 
-     like: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id ? {...g, priority: g.priority + 1} : g )})),
-     dislike: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id ? {...g, priority: g.priority - 1} : g)})),
+     like: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id ? {...g, priority: Math.min(5, g.priority + 1)} : g )})),
+     dislike: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id ? {...g, priority: Math.max(1, g.priority - 1)} : g)})),
      save: (id) => set((state) => ({gigs: state.gigs.map(g => g.id === id && g.status === 'new' ? {...g, status: 'in-progress',canDoneTime: Date.now() + 60000 }: g )})),
      done: (id) => set((state) => {
         const gig = state.gigs.find(g => g.id === id);
-        if (!gig || gig.status !== 'in-progress') return state;
+       if (!gig || gig.status !== 'in-progress') return state;
+       if(gig.canDoneTime && Date.now() < gig.canDoneTime) return state
         return {...state,balance: state.balance + gig.price, gigs: state.gigs.map(g => g.id === id ? {...g, status: 'finished', done: true} : g)}
      }),
      add_gig: (newGig) => set((state) => ({...state,gigs: [...state.gigs, newGig]})),
      delete_gig: (id) => set((state) => ({...state,gigs: [...state.gigs.filter(g => g.id !== id)]})),
-  }),{name: 'freelance_tracker', version: 1}))
+  }),{name: 'freelance_tracker', version: 2, migrate}))
   //
 
 
     //GIGS COMPONENT//
     function AllVacancy() {
-        const {gigs,balance} = useStore(useShallow((s) => ({
-             balance: s.balance,
+        const {gigs} = useStore(useShallow((s) => ({
              gigs: s.gigs,
         })))
 
-    const [selectedStatus, setSelectedStatus] = useState('all');
+    const [selectedStatus, setSelectedStatus] = useState<Status | 'all'>('all');
     const [searchQuary,setSearchQuery] = useState('')
 
-    const filteredGigs = gigs.filter(gig => {
+      const [now, setNow] = useState(Date.now())
+
+      const onTick = useEffectEvent(() => {
+        const current = Date.now()
+        gigs.forEach(g => {
+          if (g.status === 'in-progress' && g.canDoneTime && g.canDoneTime > now && g.canDoneTime <= current) {
+            alert(`Time is up for "${g.title}", you can press Done now!`)
+          }
+        })
+        setNow(current)
+      })
+
+      useEffect(() => {
+        const timer = setInterval(() => onTick(), 5000)
+        return () => clearInterval(timer)
+      },[])
+
+      const filteredGigs = gigs.filter(gig => {
     const matchSelected =  selectedStatus === 'all' || gig.status === selectedStatus;
-    const matchQuery = gig.tags.toLowerCase().includes(searchQuary.toLowerCase());
+    const matchQuery = (gig.tags ?? '').toLowerCase().includes(searchQuary.trim().toLowerCase());
 
     return matchSelected && matchQuery
     });
 
 
-     function HandleStatus(e) {
-        setSelectedStatus(e.target.value);
+     function HandleStatus(e: React.ChangeEvent<HTMLSelectElement>) {
+        setSelectedStatus(e.target.value as Status | 'all');
        }
 
-      function handleSave(id, status) {
+      function handleSave(id: Gig['id'], status: Status) {
         if (status !== 'new') return
         useStore.getState().save(id)
         alert('Saved! You have 1 minute, hurry up!')
       }
 
-         //  const onEvent = useEffectEvent(() =>{
-         //       alert('Deadline is coming soon!')
-         // })
+
   return (
     <div>
       <h1>Vacancys</h1>
@@ -129,7 +187,7 @@ const mockGigs = [
 
        <div className="search--tag-box">
          <label>Search gig by tag:</label>
-         <input type="text" value={searchQuary} onChange={(e) => setSearchQuery(e.target.value.trim())} placeholder="Search by tag..." />
+         <input type="text" value={searchQuary} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search by tag..." />
       </div>
 
       <div className="filter-box">
@@ -145,7 +203,7 @@ const mockGigs = [
       <div className="vacancies">
         <ul>
           {filteredGigs.map(list => (
-            <div key={list.id} className="gig-card">
+            <li key={list.id} className="gig-card">
               <h2 className="author-name">Author: {list.author}</h2>
               <h2 className="title">Title:{list.title}</h2>
               <p>Price:{list.price} $</p>
@@ -160,9 +218,9 @@ const mockGigs = [
               <button onClick={() => useStore.getState().like(list.id)}>Like </button>
               <button onClick={() => useStore.getState().dislike(list.id)}>DisLike </button>
               <button onClick={() => handleSave(list.id, list.status)}>Save</button>
-              <button type="button" disabled={list.status !== 'in-progress' || (list.canDoneTime && Date.now() < list.canDoneTime)} onClick={() => useStore.getState().done(list.id)}>Done</button>
+              <button type="button" disabled={list.status !== 'in-progress' || (!!list.canDoneTime && now < list.canDoneTime)} onClick={() => useStore.getState().done(list.id)}>Done</button>
               <button type="button" onClick={() => useStore.getState().delete_gig(list.id)}>Delete</button>
-            </div>
+            </li>
           ))}
         </ul>
       </div>
@@ -178,7 +236,7 @@ const mockGigs = [
        author: z.string().min(2, 'Minimum 2 symbols!').max(25,'Maximum 25 symbols!'),
        title: z.string().min(4, 'Title must have minimum 4 symbols.').max(100, 'Title could keep 100 symbols!'),
        price: z.coerce.number().min(15, 'Min price is - 15 dollar/euro/uan/rub/ron/cny/pls').max(99999, 'Max price is - 99999 dollar/euro/uan/rub/ron/cny/pls '),
-       notes: z.string().max(1250).optional().transform(val => val === "" ? undefined : val),
+       notes: z.string().max(1250).min(4),
        tags: z.string().max(30).optional(),
        priority: z.coerce.number().min(1).max(5),
     })
@@ -188,14 +246,14 @@ const mockGigs = [
 function CreateFormComponent(){
     const [author,setAuthor] = useState('')
     const [title,setTitle] = useState('')
-    const [price,setPrice] = useState(0)
+    const [price,setPrice] = useState('')
     const [notes,setNotes] = useState('')
     const [priority,setPriority] = useState(3)
     const [tags,setTags] = useState('')
-    const [errors, setErrors] = useState({})
-    const formRef = useRef(null)
+    const [errors, setErrors] = useState<Record<string, string[] | undefined>>({})
+    const formRef = useRef<HTMLInputElement>(null)
 
-    function createForm(e){
+    function createForm(e: React.SubmitEvent<HTMLFormElement>){
       e.preventDefault()
       const resultGigs_User = createOwnGigs_User.safeParse({
          author: author,
@@ -212,11 +270,12 @@ function CreateFormComponent(){
         console.log('Form parsing error ! ')
         return
       }
-      const newGig_System = {
+      const newGig_System: Gig = {
         ...resultGigs_User.data,
         id: crypto.randomUUID(),
         status: 'new',
         done: false,
+        canDoneTime: null,
         addedAt: new Date().toISOString().slice(0,10)
       }
 
@@ -225,12 +284,12 @@ function CreateFormComponent(){
       useStore.getState().add_gig(newGig_System)
        setAuthor('')
        setTitle('')
-       setPrice(0)
+       setPrice('')
        setNotes('')
        setTags('')
        setPriority(3)
        setErrors({})
-       formRef.current.focus()
+       formRef.current?.focus()
     }
 
 
@@ -239,7 +298,7 @@ function CreateFormComponent(){
         <form onSubmit={createForm}>
           <div className="author-input">
             <label htmlFor="author">Author:</label>
-            <input id="author" name="author" type="text" ref={formRef} value={author} onChange={(e) => { setAuthor(e.target.value); setErrors(prev => ({ ...prev, author: undefined })) }} placeholder="Enter your name/surname..." required/>
+            <input id="author" name="author" type="text" maxLength={25} ref={formRef} value={author} onChange={(e) => { setAuthor(e.target.value); setErrors(prev => ({ ...prev, author: undefined })) }} placeholder="Enter your name/surname..." required/>
             <span id="char-counter" style={{ fontSize: '12px', color: '#666' }}>
              Symbols left: {25 - author.length} out {25}
             </span>
@@ -258,13 +317,13 @@ function CreateFormComponent(){
           <div className="price--note-input">
             <div className="price">
              <label htmlFor="price">Price:</label>
-              <input id="price" type="number" name="price" value={price} placeholder="Your price:" onChange={(e) => { setPrice(e.target.value); setErrors(prev => ({ ...prev, price: undefined })) }} required  />
+              <input id="price" min={15} type="number" name="price" value={price} placeholder="Your price:" onChange={(e) => { setPrice(e.target.value); setErrors(prev => ({ ...prev, price: undefined })) }} required  />
              {errors.price && <span style={{ color: 'red' }}>{errors.price[0]}</span>}
             </div>
 
             <div className="notes">
               <label htmlFor="notes">Notes:</label>
-              <input id="notes" type="text" name="notes" value={notes} onChange={(e) => { setNotes(e.target.value);   setErrors(prev => ({ ...prev, notes: undefined })) }} placeholder="Enter additional notes" />
+              <input id="notes" min={4} type="text" name="notes" value={notes} onChange={(e) => { setNotes(e.target.value);   setErrors(prev => ({ ...prev, notes: undefined })) }} placeholder="Enter additional notes" required/>
             </div>
             {errors.notes && <span style={{ color: 'red' }}>{errors.notes[0]}</span>}
           </div>
